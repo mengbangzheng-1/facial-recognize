@@ -51,7 +51,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--kl-weight", type=float, default=TrainConfig.KL_LOSS_WEIGHT,
                         help="KL distillation loss weight")
     parser.add_argument("--teacher-path", type=str,
-                        default="checkpoints/teacher/best_model.pth",
+                        default="model_checkpoints/teacher/best_model.pth",
                         help="Path to trained teacher model weights")
     parser.add_argument("--data-dir", type=str, default="data/fer2013",
                         help="FER2013 dataset directory")

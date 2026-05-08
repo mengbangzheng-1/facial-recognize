@@ -44,7 +44,7 @@ class DistillationTrainer:
         optimizer: torch.optim.Optimizer,
         device: torch.device,
         scheduler: Optional[Any] = None,
-        checkpoint_dir: str = "checkpoints/student",
+        checkpoint_dir: str = "model_checkpoints/student",
         log_dir: str = "logs",
         patience: int = 15,
     ):

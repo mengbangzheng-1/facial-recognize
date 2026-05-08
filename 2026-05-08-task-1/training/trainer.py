@@ -40,7 +40,7 @@ class Trainer:
         optimizer: torch.optim.Optimizer,
         device: torch.device,
         scheduler: Optional[Any] = None,
-        checkpoint_dir: str = "checkpoints/teacher",
+        checkpoint_dir: str = "model_checkpoints/teacher",
         log_dir: str = "logs",
         patience: int = 10,
     ):

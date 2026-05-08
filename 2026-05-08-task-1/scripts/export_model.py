@@ -120,12 +120,12 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Export and benchmark model")
     parser.add_argument(
         "--model-path", type=str,
-        default="checkpoints/student/best_model.pth",
+        default="model_checkpoints/student/best_model.pth",
         help="Path to trained model weights",
     )
     parser.add_argument(
         "--output-path", type=str,
-        default="checkpoints/student/student_traced.pt",
+        default="model_checkpoints/student/student_traced.pt",
         help="Output path for TorchScript model",
     )
     parser.add_argument(

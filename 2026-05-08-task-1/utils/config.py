@@ -15,7 +15,7 @@ import torch
 # ===========================================================================
 ROOT_DIR: Path = Path(__file__).resolve().parent.parent
 DATA_DIR: Path = ROOT_DIR / "data" / "fer2013"
-CHECKPOINT_DIR: Path = ROOT_DIR / "checkpoints"
+CHECKPOINT_DIR: Path = ROOT_DIR / "model_checkpoints"
 LOG_DIR: Path = ROOT_DIR / "logs"
 
 TEACHER_CKPT_DIR: Path = CHECKPOINT_DIR / "teacher"

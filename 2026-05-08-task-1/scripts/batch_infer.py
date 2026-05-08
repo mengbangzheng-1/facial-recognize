@@ -122,7 +122,7 @@ def main() -> None:
     parser.add_argument("--image-dir", type=str, required=True,
                         help="Directory containing images")
     parser.add_argument("--model-path", type=str,
-                        default="checkpoints/student/best_model.pth",
+                        default="model_checkpoints/student/best_model.pth",
                         help="Path to model weights")
     parser.add_argument("--output", type=str, default="batch_results.csv",
                         help="Output file path (csv or json)")
