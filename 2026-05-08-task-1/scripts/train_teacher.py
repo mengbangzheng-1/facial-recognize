@@ -23,7 +23,7 @@ from data.transforms import get_train_transforms, get_val_transforms
 from models.teacher_model import ConvNeXtTeacher
 from training.losses import FocalLoss
 from training.trainer import Trainer
-from utils.config import TrainConfig, get_device, TEACHER_CKPT_DIR
+from utils.config import TrainConfig, get_device, TEACHER_CKPT_DIR, IMAGE_SIZE
 from utils.logger import setup_logger
 
 
@@ -59,14 +59,15 @@ def main() -> None:
 
     logger.info(f"Device: {device}")
     logger.info(f"Epochs: {args.epochs}, Batch size: {args.batch_size}, LR: {args.lr}")
+    logger.info(f"Image size: {IMAGE_SIZE}")
 
-    # Dataset
+    # Dataset with enhanced augmentation and 64x64 resolution
     csv_path = f"{args.data_dir}/fer2013.csv"
     train_dataset = FER2013Dataset(
-        csv_path, transform=get_train_transforms(), usage="Training"
+        csv_path, transform=get_train_transforms(IMAGE_SIZE), usage="Training"
     )
     val_dataset = FER2013Dataset(
-        csv_path, transform=get_val_transforms(), usage="PublicTest"
+        csv_path, transform=get_val_transforms(IMAGE_SIZE), usage="PublicTest"
     )
 
     train_loader = DataLoader(
@@ -78,15 +79,21 @@ def main() -> None:
         num_workers=TrainConfig.NUM_WORKERS, pin_memory=True,
     )
 
-    # Model
+    # Model - fully fine-tuned (backbone NOT frozen)
     model = ConvNeXtTeacher(pretrained=True)
-    model.freeze_backbone()
-    logger.info("ConvNeXt-Base teacher model initialized with frozen backbone")
+    # NOTE: backbone is intentionally NOT frozen for better FER2013 performance
+    logger.info("ConvNeXt-Base teacher model initialized with full fine-tuning")
 
-    # Loss and optimizer
-    criterion = FocalLoss(gamma=TrainConfig.FOCAL_GAMMA)
+    # Loss with Label Smoothing for regularization
+    criterion = FocalLoss(
+        gamma=TrainConfig.FOCAL_GAMMA,
+        label_smoothing=TrainConfig.LABEL_SMOOTHING
+    )
+    logger.info(f"FocalLoss with label_smoothing={TrainConfig.LABEL_SMOOTHING}")
+
+    # Optimizer for all parameters (full fine-tuning)
     optimizer = torch.optim.AdamW(
-        filter(lambda p: p.requires_grad, model.parameters()),
+        model.parameters(),  # Train all parameters
         lr=args.lr, weight_decay=args.weight_decay,
     )
     scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(

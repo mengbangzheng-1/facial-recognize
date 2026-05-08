@@ -25,7 +25,7 @@ from models.student_model import ImprovedMobileNetV3Small
 from models.teacher_model import ConvNeXtTeacher
 from training.distill_trainer import DistillationTrainer
 from training.losses import CombinedLoss
-from utils.config import TrainConfig, get_device, STUDENT_CKPT_DIR
+from utils.config import TrainConfig, get_device, STUDENT_CKPT_DIR, IMAGE_SIZE
 from utils.logger import setup_logger
 
 
@@ -73,14 +73,15 @@ def main() -> None:
     logger.info(f"Device: {device}")
     logger.info(f"Epochs: {args.epochs}, Batch size: {args.batch_size}, LR: {args.lr}")
     logger.info(f"Temperature: {args.temperature}, Focal: {args.focal_weight}, KL: {args.kl_weight}")
+    logger.info(f"Image size: {IMAGE_SIZE}")
 
-    # Dataset
+    # Dataset with enhanced augmentation and 64x64 resolution
     csv_path = f"{args.data_dir}/fer2013.csv"
     train_dataset = FER2013Dataset(
-        csv_path, transform=get_train_transforms(), usage="Training"
+        csv_path, transform=get_train_transforms(IMAGE_SIZE), usage="Training"
     )
     val_dataset = FER2013Dataset(
-        csv_path, transform=get_val_transforms(), usage="PublicTest"
+        csv_path, transform=get_val_transforms(IMAGE_SIZE), usage="PublicTest"
     )
 
     train_loader = DataLoader(
@@ -102,13 +103,15 @@ def main() -> None:
     total_params = sum(p.numel() for p in student.parameters())
     logger.info(f"Student model parameters: {total_params:,}")
 
-    # Combined loss
+    # Combined loss with label smoothing
     criterion = CombinedLoss(
         focal_weight=args.focal_weight,
         kl_weight=args.kl_weight,
         temperature=args.temperature,
         gamma=TrainConfig.FOCAL_GAMMA,
+        label_smoothing=TrainConfig.LABEL_SMOOTHING,
     )
+    logger.info(f"CombinedLoss with label_smoothing={TrainConfig.LABEL_SMOOTHING}")
 
     # Optimizer and scheduler
     optimizer = torch.optim.AdamW(

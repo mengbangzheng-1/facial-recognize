@@ -5,7 +5,7 @@ Project-wide hyperparameters, path constants, and device management.
 """
 
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Tuple
 
 import torch
 
@@ -32,32 +32,38 @@ NUM_CLASSES: int = 7
 
 
 # ===========================================================================
+# Image Configuration
+# ===========================================================================
+IMAGE_SIZE: Tuple[int, int] = (64, 64)  # Increased from 48x48 for better accuracy
+
+
+# ===========================================================================
 # Training Hyperparameters
 # ===========================================================================
 class TrainConfig:
     """Training hyperparameters for teacher and student models."""
 
-    # Teacher model
+    # Teacher model - optimized for FER2013
     TEACHER_EPOCHS: int = 50
-    TEACHER_LR: float = 1e-4
+    TEACHER_LR: float = 5e-5  # Reduced from 1e-4 for better convergence
     TEACHER_WEIGHT_DECAY: float = 1e-4
 
     # Student model
     STUDENT_EPOCHS: int = 100
-    STUDENT_LR: float = 3e-4
+    STUDENT_LR: float = 1e-4  # Reduced for stability
     STUDENT_WEIGHT_DECAY: float = 1e-4
 
     # Common
     BATCH_SIZE: int = 64
     NUM_WORKERS: int = 4
 
-    # Learning rate scheduler
+    # Learning rate scheduler - cosine annealing for better convergence
     SCHEDULER_PATIENCE: int = 5
     SCHEDULER_FACTOR: float = 0.5
 
-    # Early stopping
-    TEACHER_PATIENCE: int = 10
-    STUDENT_PATIENCE: int = 15
+    # Early stopping - more patient for larger models
+    TEACHER_PATIENCE: int = 25  # Increased for longer training
+    STUDENT_PATIENCE: int = 20
 
     # Distillation
     DISTILL_TEMPERATURE: float = 4.0
@@ -65,8 +71,11 @@ class TrainConfig:
     KL_LOSS_WEIGHT: float = 0.3
     FOCAL_GAMMA: float = 2.0
 
+    # Label smoothing for regularization
+    LABEL_SMOOTHING: float = 0.1
+
     # Gradient clipping
-    MAX_GRAD_NORM: float = 5.0
+    MAX_GRAD_NORM: float = 1.0  # Reduced for stability
 
 
 # ===========================================================================

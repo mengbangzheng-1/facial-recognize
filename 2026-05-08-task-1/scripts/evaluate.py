@@ -28,7 +28,7 @@ from data.transforms import get_val_transforms
 from models.student_model import ImprovedMobileNetV3Small
 from models.student_model_config import EMOTION_LABELS, NUM_CLASSES
 from models.teacher_model import ConvNeXtTeacher
-from utils.config import get_device
+from utils.config import get_device, IMAGE_SIZE
 
 
 def parse_args() -> argparse.Namespace:
@@ -100,16 +100,16 @@ def main() -> None:
     model.load_state_dict(state_dict)
     print(f"Model loaded from: {args.model_path}")
 
-    # Dataset
+    # Dataset with 64x64 resolution
     csv_path = f"{args.data_dir}/fer2013.csv"
     test_dataset = FER2013Dataset(
-        csv_path, transform=get_val_transforms(), usage="PrivateTest"
+        csv_path, transform=get_val_transforms(IMAGE_SIZE), usage="PrivateTest"
     )
+    print(f"Image size: {IMAGE_SIZE}, Test samples: {len(test_dataset)}")
     test_loader = DataLoader(
         test_dataset, batch_size=args.batch_size, shuffle=False,
         num_workers=4, pin_memory=True,
     )
-    print(f"Test samples: {len(test_dataset)}")
 
     # Evaluate
     results = evaluate(model, test_loader, device)

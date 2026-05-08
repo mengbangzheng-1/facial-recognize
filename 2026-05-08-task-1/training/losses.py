@@ -13,14 +13,16 @@ import torch.nn.functional as F
 
 
 class FocalLoss(nn.Module):
-    """Focal Loss for handling class imbalance.
+    """Focal Loss for handling class imbalance with optional label smoothing.
 
     Down-weights well-classified examples and focuses on hard examples.
+    Label smoothing helps prevent overconfidence and improves generalization.
 
     Args:
         alpha: Per-class weight tensor [num_classes]. If None, no class weighting.
         gamma: Focusing parameter. Higher values focus more on hard examples.
         reduction: Reduction mode ('mean', 'sum', or 'none').
+        label_smoothing: Label smoothing factor (0.0 to 1.0).
     """
 
     def __init__(
@@ -28,11 +30,13 @@ class FocalLoss(nn.Module):
         alpha: Optional[torch.Tensor] = None,
         gamma: float = 2.0,
         reduction: str = "mean",
+        label_smoothing: float = 0.0,
     ):
         super().__init__()
         self.alpha = alpha
         self.gamma = gamma
         self.reduction = reduction
+        self.label_smoothing = label_smoothing
 
     def forward(
         self, inputs: torch.Tensor, targets: torch.Tensor
@@ -47,7 +51,8 @@ class FocalLoss(nn.Module):
             Focal loss value.
         """
         ce_loss = F.cross_entropy(
-            inputs, targets, reduction="none", weight=self.alpha
+            inputs, targets, reduction="none", weight=self.alpha,
+            label_smoothing=self.label_smoothing
         )
         pt = torch.exp(-ce_loss)
         focal_loss = ((1 - pt) ** self.gamma) * ce_loss
@@ -93,7 +98,7 @@ class DistillationLoss(nn.Module):
 
 
 class CombinedLoss(nn.Module):
-    """Combined Focal + KL distillation loss.
+    """Combined Focal + KL distillation loss with optional label smoothing.
 
     Loss = focal_weight * FocalLoss + kl_weight * DistillationLoss
 
@@ -103,6 +108,7 @@ class CombinedLoss(nn.Module):
         temperature: Temperature for the distillation loss.
         alpha: Per-class weights for focal loss.
         gamma: Focusing parameter for focal loss.
+        label_smoothing: Label smoothing factor for regularization.
     """
 
     def __init__(
@@ -112,9 +118,10 @@ class CombinedLoss(nn.Module):
         temperature: float = 4.0,
         alpha: Optional[torch.Tensor] = None,
         gamma: float = 2.0,
+        label_smoothing: float = 0.0,
     ):
         super().__init__()
-        self.focal_loss = FocalLoss(alpha=alpha, gamma=gamma)
+        self.focal_loss = FocalLoss(alpha=alpha, gamma=gamma, label_smoothing=label_smoothing)
         self.kl_loss = DistillationLoss(temperature=temperature)
         self.focal_weight = focal_weight
         self.kl_weight = kl_weight

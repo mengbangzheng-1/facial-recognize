@@ -69,7 +69,7 @@ class ModelCheckpoint:
     """
 
     def __init__(self, save_dir: str, mode: str = "min"):
-        self.save_dir = Path(save_dir)
+        self.save_dir = Path(save_dir)  # Convert string to Path
         self.save_dir.mkdir(parents=True, exist_ok=True)
         self.mode = mode
         self.best_score: Optional[float] = None
@@ -94,7 +94,13 @@ class ModelCheckpoint:
 
         if is_best:
             self.best_score = score
+            # Ensure directory exists (idempotent)
+            self.save_dir.mkdir(parents=True, exist_ok=True)
             save_path = self.save_dir / "best_model.pth"
             torch.save(model.state_dict(), save_path)
+            # Also save with epoch info for clarity
+            epoch_save_path = self.save_dir / f"best_model_score{score:.4f}.pth"
+            torch.save(model.state_dict(), epoch_save_path)
+            print(f"[ModelCheckpoint] Saved model to {save_path}")
             return True
         return False
