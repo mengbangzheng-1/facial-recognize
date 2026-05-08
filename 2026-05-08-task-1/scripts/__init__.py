@@ -1,1 +1,0 @@
-# FER System - Scripts Package
