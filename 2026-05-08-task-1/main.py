@@ -4,8 +4,15 @@
 Launches the PyQt5 application with the FER system main window.
 """
 
-import argparse
 import sys
+import os
+
+# 自动添加项目根目录到Python路径
+_script_dir = os.path.dirname(os.path.abspath(__file__))  # 项目根目录
+if _script_dir not in sys.path:
+    sys.path.insert(0, _script_dir)
+
+import argparse
 
 from PyQt5.QtWidgets import QApplication
 

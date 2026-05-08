@@ -5,6 +5,15 @@ Trains the improved MobileNetV3-Small student model using knowledge
 distillation from a pretrained ConvNeXt-Base teacher model.
 """
 
+import sys
+import os
+
+# 自动添加项目根目录到Python路径
+_script_dir = os.path.dirname(os.path.abspath(__file__))  # scripts/
+_project_root = os.path.dirname(_script_dir)  # 项目根目录
+if _project_root not in sys.path:
+    sys.path.insert(0, _project_root)
+
 import argparse
 
 import torch
