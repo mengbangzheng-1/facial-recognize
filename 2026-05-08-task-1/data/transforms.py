@@ -8,7 +8,35 @@ Enhanced version with stronger data augmentation for better generalization.
 from typing import Callable, Tuple
 
 import torch
+import torch.nn.functional as F
 from torchvision import transforms
+
+
+def mixup_data(x: torch.Tensor, y: torch.Tensor, alpha: float = 0.4) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, float]:
+    """Apply Mixup augmentation.
+    
+    Mixup creates virtual training examples by mixing two images.
+    Very effective against overfitting.
+    
+    Args:
+        x: Input images [B, C, H, W]
+        y: Labels [B]
+        alpha: Mixup parameter (higher = more mixing)
+        
+    Returns:
+        Mixed images, labels of original, labels of mixed, lambda
+    """
+    if alpha > 0:
+        lam = torch.distributions.Beta(alpha, alpha).sample()
+    else:
+        lam = 1.0
+
+    batch_size = x.size(0)
+    index = torch.randperm(batch_size).to(x.device)
+
+    mixed_x = lam * x + (1 - lam) * x[index, :]
+    y_a, y_b = y, y[index]
+    return mixed_x, y_a, y_b, lam
 
 
 def get_train_transforms(image_size: Tuple[int, int] = (64, 64)) -> transforms.Compose:
@@ -29,20 +57,20 @@ def get_train_transforms(image_size: Tuple[int, int] = (64, 64)) -> transforms.C
         transforms.ToPILImage(),
         transforms.RandomHorizontalFlip(p=0.5),
         
-        # Stronger geometric augmentation
-        transforms.RandomRotation(degrees=15),  # Increased from 10
+        # Moderate geometric augmentation (112x112 input)
+        transforms.RandomRotation(degrees=15),
         transforms.RandomAffine(
             degrees=0,
-            translate=(0.1, 0.1),  # Random translation
-            scale=(0.9, 1.1),  # Random scaling
+            translate=(0.1, 0.1),
+            scale=(0.9, 1.1),
         ),
         
-        # Color augmentation
+        # Light color augmentation (FER2013 is grayscale, brightness/contrast still matter)
         transforms.ColorJitter(
-            brightness=0.3,  # Increased from 0.2
-            contrast=0.3,  # Increased from 0.2
-            saturation=0.2,
-            hue=0.1,
+            brightness=0.2,
+            contrast=0.2,
+            saturation=0.0,  # No saturation augmentation for grayscale
+            hue=0.0,         # No hue augmentation for grayscale
         ),
         
         # Convert to tensor and normalize
@@ -54,7 +82,7 @@ def get_train_transforms(image_size: Tuple[int, int] = (64, 64)) -> transforms.C
         
         # Random Erasing for regularization
         transforms.RandomErasing(
-            p=0.25,  # 25% chance
+            p=0.25,
             scale=(0.02, 0.2),
             ratio=(0.3, 3.3),
         ),

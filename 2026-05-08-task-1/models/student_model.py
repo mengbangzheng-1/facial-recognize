@@ -1,8 +1,8 @@
 # -*- coding: utf-8 -*-
 """FER System - Improved MobileNetV3-Small Student Model
 
-Student model based on MobileNetV3-Small with SE, CBAM, and ASPP
-attention modules for facial expression recognition.
+MobileNetV3-Small + SE + CBAM + ASPP for knowledge distillation.
+Designed to be trained with a ConvNeXt-Base teacher (70.27% val_acc).
 """
 
 import torch
@@ -17,8 +17,8 @@ from models.student_model_config import (
     CBAM_CHANNEL_REDUCTION,
     CBAM_SPATIAL_KERNEL,
     CLASSIFIER_HIDDEN_DIM,
-    DROPOUT_FINAL,
     DROPOUT_FIRST,
+    DROPOUT_FINAL,
     NUM_CLASSES,
     SE_REDUCTION_RATIO,
 )
@@ -27,8 +27,7 @@ from models.student_model_config import (
 class LightweightClassifier(nn.Module):
     """Lightweight classification head.
 
-    Uses global average pooling followed by a small FC network
-    to keep parameter count low.
+    Global average pooling → dropout → FC → Hardswish → dropout → FC.
 
     Args:
         in_channels: Number of input feature channels.
@@ -70,92 +69,82 @@ class LightweightClassifier(nn.Module):
 
 
 class ImprovedMobileNetV3Small(nn.Module):
-    """Improved MobileNetV3-Small with attention modules.
+    """Improved MobileNetV3-Small with SE, CBAM, and ASPP.
 
-    Integrates SE attention on early layers, CBAM on middle/later layers,
-    and ASPP for multi-scale context before the classification head.
+    Architecture:
+        features[0..11] (stop before layer12/576ch)
+        → SE on layers 0-3 → CBAM on layers 4-11
+        → ASPP (96ch input, 96ch output)
+        → LightweightClassifier (96 → 256 → 7)
 
     Args:
-        num_classes: Number of output classes.
-        dropout: Dropout rate for the classifier.
-        pretrained: Whether to load ImageNet pretrained backbone weights.
+        num_classes: Number of output classes (FER2013 = 7).
+        pretrained: Whether to load ImageNet pretrained weights.
     """
 
     def __init__(
         self,
         num_classes: int = NUM_CLASSES,
-        dropout: float = DROPOUT_FIRST,
         pretrained: bool = True,
     ):
         super().__init__()
 
-        # Load MobileNetV3-Small backbone
+        # ── Backbone ─────────────────────────────────────────────────
         weights = MobileNet_V3_Small_Weights.DEFAULT if pretrained else None
         backbone = mobilenet_v3_small(weights=weights)
-        self.features = backbone.features
+        self.features = backbone.features  # indices 0-12, last is 576ch
 
-        # Insert SE modules on early layers (0-3)
-        self._insert_se_modules()
+        # ── Attention: SE on early layers (0-3), CBAM on middle layers (4-11) ──
+        self.se_modules = nn.ModuleList()
+        for i in range(4):
+            ch = self._get_out_channels(i)
+            self.se_modules.append(SEModule(ch, reduction=SE_REDUCTION_RATIO))
 
-        # Insert CBAM modules on middle/later layers (4-11)
-        self._insert_cbam_modules()
+        self.cbam_modules = nn.ModuleList()
+        for i in range(4, 12):
+            ch = self._get_out_channels(i)
+            self.cbam_modules.append(
+                CBAM(ch, reduction=CBAM_CHANNEL_REDUCTION,
+                     spatial_kernel=CBAM_SPATIAL_KERNEL)
+            )
 
-        # ASPP module after feature extraction
-        # Last feature layer outputs 576 channels; ASPP takes 96 channels
-        # so we need to stop at layer 11 (96 channels)
+        self._se_indices = list(range(4))
+        self._cbam_indices = list(range(4, 12))
+
+        # ── ASPP on 96-channel feature map (after layer11) ──────────
         self.aspp = ASPP(
             in_channels=ASPP_OUT_CHANNELS,
             out_channels=ASPP_OUT_CHANNELS,
             dilations=ASPP_DILATIONS,
         )
 
-        # Lightweight classifier
+        # ── Classifier ───────────────────────────────────────────────
         self.classifier = LightweightClassifier(
             in_channels=ASPP_OUT_CHANNELS,
             hidden_dim=CLASSIFIER_HIDDEN_DIM,
             num_classes=num_classes,
-            dropout_first=dropout,
+            dropout_first=DROPOUT_FIRST,
             dropout_final=DROPOUT_FINAL,
         )
-
-    def _insert_se_modules(self) -> None:
-        """Insert SE attention modules after early feature layers (0-3)."""
-        self.se_modules = nn.ModuleList()
-        for i in range(4):
-            out_channels = self._get_out_channels(i)
-            self.se_modules.append(
-                SEModule(out_channels, reduction=SE_REDUCTION_RATIO)
-            )
-        self._se_indices = list(range(4))
-
-    def _insert_cbam_modules(self) -> None:
-        """Insert CBAM attention modules on middle/later layers (4-11)."""
-        self.cbam_modules = nn.ModuleList()
-        for i in range(4, 12):
-            out_channels = self._get_out_channels(i)
-            self.cbam_modules.append(
-                CBAM(out_channels, reduction=CBAM_CHANNEL_REDUCTION,
-                     spatial_kernel=CBAM_SPATIAL_KERNEL)
-            )
-        self._cbam_indices = list(range(4, 12))
 
     def _get_out_channels(self, layer_idx: int) -> int:
         """Get output channel count for a feature layer.
 
-        Uses the backbone's out_channels attribute when available,
-        falling back to a hardcoded channel list.
+        MobileNetV3-Small features[0..11] channel list:
+            [16, 16, 24, 24, 40, 40, 40, 48, 48, 96, 96, 96]
+        features[12] outputs 576ch (not used in forward).
 
         Args:
-            layer_idx: Index into self.features.
+            layer_idx: Index into self.features (0-11).
 
         Returns:
             Number of output channels.
         """
         layer = self.features[layer_idx]
-        if hasattr(layer, 'out_channels'):
+        if hasattr(layer, "out_channels"):
             return layer.out_channels
-        # Fallback channel list for MobileNetV3-Small
-        channel_list = [16, 16, 24, 24, 40, 40, 40, 48, 48, 96, 96, 96, 576]
+        # Fallback – matches features[0..11] exactly
+        channel_list = [16, 16, 24, 24, 40, 40, 40, 48, 48, 96, 96, 96]
         if layer_idx < len(channel_list):
             return channel_list[layer_idx]
         return 96
@@ -164,19 +153,18 @@ class ImprovedMobileNetV3Small(nn.Module):
         """Forward pass.
 
         Args:
-            x: Input image [B, 3, 48, 48].
+            x: Input image [B, 3, H, W], recommend 112×112.
 
         Returns:
             Logits [B, num_classes].
         """
-        # Feature extraction with attention
-        # Only use features[0..11] — skip features[12] (Conv2dNormActivation, 576ch)
         se_idx = 0
         cbam_idx = 0
 
+        # Feature extraction with interleaved attention (stop before layer12)
         for i, layer in enumerate(self.features):
             if i >= 12:
-                break  # Stop at layer 11 (96ch output)
+                break  # stop at layer11 (96ch output)
             x = layer(x)
 
             if i in self._se_indices:
@@ -186,9 +174,28 @@ class ImprovedMobileNetV3Small(nn.Module):
                 x = self.cbam_modules[cbam_idx](x)
                 cbam_idx += 1
 
-        # ASPP multi-scale feature extraction
-        x = self.aspp(x)
+        # ASPP multi-scale context
+        x = self.aspp(x)  # [B, 96, H/32, W/32]
 
         # Classification
         x = self.classifier(x)
         return x
+
+    @property
+    def num_params(self) -> int:
+        """Return total trainable parameters."""
+        return sum(p.numel() for p in self.parameters() if p.requires_grad)
+
+
+# ── Quick test ────────────────────────────────────────────────────────────────
+if __name__ == "__main__":
+    model = ImprovedMobileNetV3Small(num_classes=7, pretrained=False)
+    x = torch.randn(2, 3, 112, 112)
+
+    with torch.no_grad():
+        logits = model(x)
+
+    print(f"模型参数: {model.num_params:,}")
+    print(f"输入尺寸: {x.shape}")
+    print(f"输出尺寸: {logits.shape}")  # [2, 7]
+    print(f"输出范围: [{logits.min().item():.3f}, {logits.max().item():.3f}]")

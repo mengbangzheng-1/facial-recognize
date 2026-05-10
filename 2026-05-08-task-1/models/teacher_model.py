@@ -32,11 +32,16 @@ class ConvNeXtTeacher(nn.Module):
         else:
             self.backbone = convnext_base(weights=None)
 
-        # Replace classifier head
+        # Replace classifier head with Dropout for regularization
         # ConvNeXt classifier: features -> avgpool -> layer_norm -> flatten -> linear
         original_linear = self.backbone.classifier[-1]
         in_features = original_linear.in_features  # 1024 for Base
-        self.backbone.classifier[-1] = nn.Linear(in_features, num_classes)
+        
+        # Replace linear with Dropout + Linear for regularization
+        self.backbone.classifier[-1] = nn.Sequential(
+            nn.Dropout(p=0.3),  # 30% dropout to reduce overfitting
+            nn.Linear(in_features, num_classes)
+        )
 
         # Feature extraction hook
         self._features = None
@@ -63,7 +68,7 @@ class ConvNeXtTeacher(nn.Module):
         """Forward pass.
 
         Args:
-            x: Input image [B, 3, 48, 48].
+            x: Input image [B, 3, 112, 112].
 
         Returns:
             Tuple of (logits, features):

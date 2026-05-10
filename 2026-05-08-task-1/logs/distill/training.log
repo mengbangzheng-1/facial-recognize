@@ -1,0 +1,28 @@
+2026-05-09 14:32:33 | INFO     | train_distill | ============================================================
+2026-05-09 14:32:33 | INFO     | train_distill | Knowledge Distillation Training
+2026-05-09 14:32:33 | INFO     | train_distill |   Student  : ImprovedMobileNetV3Small (+SE/CBAM/ASPP)
+2026-05-09 14:32:33 | INFO     | train_distill |   Teacher  : ConvNeXt-Base (70.27%% val_acc)
+2026-05-09 14:32:33 | INFO     | train_distill |   Image    : (112, 112)
+2026-05-09 14:32:33 | INFO     | train_distill |   Epochs   : 100
+2026-05-09 14:32:33 | INFO     | train_distill |   Batch    : 256
+2026-05-09 14:32:33 | INFO     | train_distill |   LR       : 0.0001 (backbone x0.5 = 5.00e-05)
+2026-05-09 14:32:33 | INFO     | train_distill |   WD       : 0.0001
+2026-05-09 14:32:33 | INFO     | train_distill |   Patience : 20
+2026-05-09 14:32:33 | INFO     | train_distill |   T (temp) : 2.0
+2026-05-09 14:32:33 | INFO     | train_distill |   Loss     : 0.3*Focal + 0.7*KL
+2026-05-09 14:32:33 | INFO     | train_distill |   Teacher ckpt: model_checkpoints/teacher/best_teacher.pth
+2026-05-09 14:32:33 | INFO     | train_distill | ============================================================
+2026-05-09 14:33:13 | INFO     | train_distill | ============================================================
+2026-05-09 14:33:13 | INFO     | train_distill | Knowledge Distillation Training
+2026-05-09 14:33:13 | INFO     | train_distill |   Student  : ImprovedMobileNetV3Small (+SE/CBAM/ASPP)
+2026-05-09 14:33:13 | INFO     | train_distill |   Teacher  : ConvNeXt-Base (70.27%% val_acc)
+2026-05-09 14:33:13 | INFO     | train_distill |   Image    : (112, 112)
+2026-05-09 14:33:13 | INFO     | train_distill |   Epochs   : 100
+2026-05-09 14:33:13 | INFO     | train_distill |   Batch    : 256
+2026-05-09 14:33:13 | INFO     | train_distill |   LR       : 0.0001 (backbone x0.5 = 5.00e-05)
+2026-05-09 14:33:13 | INFO     | train_distill |   WD       : 0.0001
+2026-05-09 14:33:13 | INFO     | train_distill |   Patience : 20
+2026-05-09 14:33:13 | INFO     | train_distill |   T (temp) : 2.0
+2026-05-09 14:33:13 | INFO     | train_distill |   Loss     : 0.3*Focal + 0.7*KL
+2026-05-09 14:33:13 | INFO     | train_distill |   Teacher ckpt: model_checkpoints/teacher/best_teacher.pth
+2026-05-09 14:33:13 | INFO     | train_distill | ============================================================
