@@ -34,7 +34,7 @@ NUM_CLASSES: int = 7
 # ===========================================================================
 # Image Configuration
 # ===========================================================================
-IMAGE_SIZE: Tuple[int, int] = (64, 64)  # Increased from 48x48 for better accuracy
+IMAGE_SIZE: Tuple[int, int] = (112, 112)  # Match teacher training size (ConvNeXt-Base requires 112+ for proper downsampling)
 
 
 # ===========================================================================
@@ -43,10 +43,10 @@ IMAGE_SIZE: Tuple[int, int] = (64, 64)  # Increased from 48x48 for better accura
 class TrainConfig:
     """Training hyperparameters for teacher and student models."""
 
-    # Teacher model - optimized for FER2013
-    TEACHER_EPOCHS: int = 50
-    TEACHER_LR: float = 5e-5  # Reduced from 1e-4 for better convergence
-    TEACHER_WEIGHT_DECAY: float = 1e-4
+    # Teacher model - optimized for FER2013 (anti-overfitting)
+    TEACHER_EPOCHS: int = 80
+    TEACHER_LR: float = 1e-4  # Suitable for head-only training
+    TEACHER_WEIGHT_DECAY: float = 5e-4  # Reduced for better convergence
 
     # Student model
     STUDENT_EPOCHS: int = 100
@@ -62,7 +62,7 @@ class TrainConfig:
     SCHEDULER_FACTOR: float = 0.5
 
     # Early stopping - more patient for larger models
-    TEACHER_PATIENCE: int = 25  # Increased for longer training
+    TEACHER_PATIENCE: int = 20
     STUDENT_PATIENCE: int = 20
 
     # Distillation
@@ -72,7 +72,7 @@ class TrainConfig:
     FOCAL_GAMMA: float = 2.0
 
     # Label smoothing for regularization
-    LABEL_SMOOTHING: float = 0.1
+    LABEL_SMOOTHING: float = 0.0  # No label smoothing, FocalLoss handles class imbalance
 
     # Gradient clipping
     MAX_GRAD_NORM: float = 1.0  # Reduced for stability

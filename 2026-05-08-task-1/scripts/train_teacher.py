@@ -14,9 +14,10 @@ if _project_root not in sys.path:
     sys.path.insert(0, _project_root)
 
 import argparse
+import math
 import torch
 from torch.utils.data import DataLoader
-from torchvision import transforms
+from torch.optim.lr_scheduler import CosineAnnealingWarmRestarts
 
 from data.dataset import FER2013Dataset
 from data.transforms import get_train_transforms, get_val_transforms
@@ -35,7 +36,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--batch-size", type=int, default=TrainConfig.BATCH_SIZE,
                         help="Batch size")
     parser.add_argument("--lr", type=float, default=TrainConfig.TEACHER_LR,
-                        help="Learning rate")
+                        help="Head learning rate (backbone gets 1% of this)")
     parser.add_argument("--weight-decay", type=float, default=TrainConfig.TEACHER_WEIGHT_DECAY,
                         help="Weight decay")
     parser.add_argument("--patience", type=int, default=TrainConfig.TEACHER_PATIENCE,
@@ -48,6 +49,12 @@ def parse_args() -> argparse.Namespace:
                         help="Log directory")
     parser.add_argument("--device", type=str, default=None,
                         help="Compute device (cpu/cuda)")
+    parser.add_argument("--no-mixup", action="store_true", default=True,
+                        help="Disable Mixup (default: disabled)")
+    parser.add_argument("--mixup", action="store_true",
+                        help="Enable Mixup")
+    parser.add_argument("--mixup-alpha", type=float, default=0.4,
+                        help="Mixup alpha parameter")
     return parser.parse_args()
 
 
@@ -79,26 +86,38 @@ def main() -> None:
         num_workers=TrainConfig.NUM_WORKERS, pin_memory=True,
     )
 
-    # Model - fully fine-tuned (backbone NOT frozen)
+    # Model
     model = ConvNeXtTeacher(pretrained=True)
-    # NOTE: backbone is intentionally NOT frozen for better FER2013 performance
-    logger.info("ConvNeXt-Base teacher model initialized with full fine-tuning")
 
-    # Loss with Label Smoothing for regularization
+    # Discriminative learning rates: small LR for backbone, large LR for head
+    backbone_params = []
+    head_params = []
+    for name, param in model.named_parameters():
+        if "classifier" in name:
+            head_params.append(param)
+        else:
+            backbone_params.append(param)
+
+    backbone_lr = args.lr * 0.5  # 5e-5 for pretrained backbone (moderate adaptation)
+    head_lr = args.lr              # 1e-4 for new head
+
+    optimizer = torch.optim.AdamW(
+        [
+            {"params": backbone_params, "lr": backbone_lr, "weight_decay": args.weight_decay},
+            {"params": head_params, "lr": head_lr, "weight_decay": args.weight_decay},
+        ]
+    )
+    logger.info(f"ConvNeXt-Base: backbone LR={backbone_lr:.2e}, head LR={head_lr:.2e} (discriminative LR)")
+
+    # Loss with Label Smoothing
     criterion = FocalLoss(
         gamma=TrainConfig.FOCAL_GAMMA,
         label_smoothing=TrainConfig.LABEL_SMOOTHING
     )
     logger.info(f"FocalLoss with label_smoothing={TrainConfig.LABEL_SMOOTHING}")
 
-    # Optimizer for all parameters (full fine-tuning)
-    optimizer = torch.optim.AdamW(
-        model.parameters(),  # Train all parameters
-        lr=args.lr, weight_decay=args.weight_decay,
-    )
-    scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
-        optimizer, mode="min", factor=TrainConfig.SCHEDULER_FACTOR,
-        patience=TrainConfig.SCHEDULER_PATIENCE,
+    scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
+        optimizer, T_max=args.epochs, eta_min=1e-7
     )
 
     # Train
@@ -111,10 +130,13 @@ def main() -> None:
         checkpoint_dir=args.checkpoint_dir,
         log_dir=args.log_dir,
         patience=args.patience,
+        use_mixup=args.mixup and not args.no_mixup,
+        mixup_alpha=args.mixup_alpha,
     )
+    logger.info(f"Mixup: {'enabled' if args.mixup else 'disabled'} (alpha={args.mixup_alpha})")
 
     history = trainer.fit(train_loader, val_loader, args.epochs)
-    logger.info(f"Training complete. Best val loss: {trainer.checkpoint.best_score:.4f}")
+    logger.info(f"Training complete. Best val acc: {trainer.checkpoint.best_score:.4f}%")
 
 
 if __name__ == "__main__":

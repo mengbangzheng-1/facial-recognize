@@ -13,7 +13,9 @@ from torch.utils.data import DataLoader
 from torch.utils.tensorboard import SummaryWriter
 
 from training.callbacks import EarlyStopping, ModelCheckpoint
+from training.losses import FocalLoss  # For Mixup loss
 from utils.logger import setup_logger
+from data.transforms import mixup_data
 
 
 class Trainer:
@@ -43,6 +45,8 @@ class Trainer:
         checkpoint_dir: str = "model_checkpoints/teacher",
         log_dir: str = "logs",
         patience: int = 10,
+        use_mixup: bool = True,
+        mixup_alpha: float = 0.4,
     ):
         self.model = model
         self.criterion = criterion
@@ -51,16 +55,18 @@ class Trainer:
         self.scheduler = scheduler
         self.checkpoint_dir = checkpoint_dir
         self.log_dir = log_dir
+        self.use_mixup = use_mixup
+        self.mixup_alpha = mixup_alpha
 
-        self.early_stopping = EarlyStopping(patience=patience, mode="min")
-        self.checkpoint = ModelCheckpoint(checkpoint_dir, mode="min")
+        self.early_stopping = EarlyStopping(patience=patience, mode="max")  # max = higher val_acc is better
+        self.checkpoint = ModelCheckpoint(checkpoint_dir, mode="max")  # max = higher is better (accuracy)
         self.writer = SummaryWriter(log_dir=str(Path(log_dir) / "events"))
         self.logger = setup_logger("trainer", log_dir)
 
         self.model.to(self.device)
 
     def train_epoch(self, train_loader: DataLoader) -> Dict[str, float]:
-        """Run one training epoch.
+        """Run one training epoch with Mixup augmentation.
 
         Args:
             train_loader: Training data loader.
@@ -77,14 +83,40 @@ class Trainer:
             images = images.to(self.device)
             labels = labels.to(self.device)
 
-            # Forward pass
-            outputs = self.model(images)
-            if isinstance(outputs, tuple):
-                logits = outputs[0]
+            # Apply Mixup augmentation
+            if self.use_mixup:
+                mixed_images, labels_a, labels_b, lam = mixup_data(images, labels, self.mixup_alpha)
+                
+                outputs = self.model(mixed_images)
+                if isinstance(outputs, tuple):
+                    logits = outputs[0]
+                else:
+                    logits = outputs
+                
+                # Mixup loss: lam * loss(a) + (1-lam) * loss(b)
+                loss_a = self.criterion(logits, labels_a)
+                loss_b = self.criterion(logits, labels_b)
+                loss = lam * loss_a + (1 - lam) * loss_b
+                
+                # For accuracy, use the original (non-mixed) images
+                with torch.no_grad():
+                    orig_outputs = self.model(images)
+                    if isinstance(orig_outputs, tuple):
+                        orig_logits = orig_outputs[0]
+                    else:
+                        orig_logits = orig_outputs
+                    _, predicted = orig_logits.max(1)
+                    correct += predicted.eq(labels).sum().item()
             else:
-                logits = outputs
-
-            loss = self.criterion(logits, labels)
+                outputs = self.model(images)
+                if isinstance(outputs, tuple):
+                    logits = outputs[0]
+                else:
+                    logits = outputs
+                loss = self.criterion(logits, labels)
+                
+                _, predicted = logits.max(1)
+                correct += predicted.eq(labels).sum().item()
 
             # Backward pass
             self.optimizer.zero_grad()
@@ -94,9 +126,7 @@ class Trainer:
 
             # Statistics
             total_loss += loss.item()
-            _, predicted = logits.max(1)
             total += labels.size(0)
-            correct += predicted.eq(labels).sum().item()
 
         return {
             "train_loss": total_loss / len(train_loader),
@@ -164,10 +194,7 @@ class Trainer:
 
             # Update scheduler
             if self.scheduler is not None:
-                if isinstance(self.scheduler, torch.optim.lr_scheduler.ReduceLROnPlateau):
-                    self.scheduler.step(val_metrics["val_loss"])
-                else:
-                    self.scheduler.step()
+                self.scheduler.step()
 
             # Log metrics
             self.logger.info(
@@ -191,11 +218,11 @@ class Trainer:
                 elif key in val_metrics:
                     history[key].append(val_metrics[key])
 
-            # Checkpoint
-            self.checkpoint.step(val_metrics["val_loss"], self.model)
+            # Checkpoint - save based on val_acc (higher is better)
+            self.checkpoint.step(val_metrics["val_acc"], self.model)
 
-            # Early stopping
-            if self.early_stopping.step(val_metrics["val_loss"]):
+            # Early stopping - also based on val_acc (higher is better)
+            if self.early_stopping.step(val_metrics["val_acc"]):
                 self.logger.info(f"Early stopping at epoch {epoch}")
                 break
 

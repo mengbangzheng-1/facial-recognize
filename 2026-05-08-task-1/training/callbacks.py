@@ -97,10 +97,12 @@ class ModelCheckpoint:
             # Ensure directory exists (idempotent)
             self.save_dir.mkdir(parents=True, exist_ok=True)
             save_path = self.save_dir / "best_model.pth"
-            torch.save(model.state_dict(), save_path)
-            # Also save with epoch info for clarity
-            epoch_save_path = self.save_dir / f"best_model_score{score:.4f}.pth"
-            torch.save(model.state_dict(), epoch_save_path)
-            print(f"[ModelCheckpoint] Saved model to {save_path}")
-            return True
+            
+            try:
+                torch.save(model.state_dict(), save_path)
+                print(f"[ModelCheckpoint] Saved best model (acc={score:.2f}%) to {save_path}")
+                return True
+            except Exception as e:
+                print(f"[ModelCheckpoint] Save failed: {e}")
+                return False
         return False

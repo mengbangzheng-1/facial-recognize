@@ -56,7 +56,7 @@ class DistillationTrainer:
         self.scheduler = scheduler
 
         self.early_stopping = EarlyStopping(patience=patience, mode="min")
-        self.checkpoint = ModelCheckpoint(checkpoint_dir, mode="min")
+        self.checkpoint = ModelCheckpoint(checkpoint_dir, mode="max")
         self.writer = SummaryWriter(log_dir=str(Path(log_dir) / "events"))
         self.logger = setup_logger("distill_trainer", log_dir)
 
@@ -141,10 +141,10 @@ class DistillationTrainer:
             labels = labels.to(self.device)
 
             student_logits = self.student(images)
-            teacher_logits, _ = self.teacher(images)
 
-            loss, _ = self.criterion(student_logits, teacher_logits, labels)
-            total_loss += loss.item()
+            # Validation: only compute FocalLoss (no teacher needed for val metric)
+            focal = self.criterion.focal_loss(student_logits, labels)
+            total_loss += focal.item()
 
             _, predicted = student_logits.max(1)
             total += labels.size(0)
@@ -213,8 +213,8 @@ class DistillationTrainer:
             history["val_loss"].append(val_metrics["val_loss"])
             history["val_acc"].append(val_metrics["val_acc"])
 
-            # Checkpoint
-            self.checkpoint.step(val_metrics["val_loss"], self.student)
+            # Checkpoint - save based on val_acc (higher is better)
+            self.checkpoint.step(val_metrics["val_acc"], self.student)
 
             # Early stopping
             if self.early_stopping.step(val_metrics["val_loss"]):
